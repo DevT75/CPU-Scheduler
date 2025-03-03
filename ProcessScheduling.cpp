@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <ios>
+#include <unordered_map>
 
 void ProcessScheduler::run(){
     while(true){
@@ -105,7 +106,7 @@ void ProcessScheduler::FCFS::schedule() {
 
 void ProcessScheduler::SJF::init() {
   processes.clear();
-  std::cout << "First Come First Serve (Non-preemptive algorithm)" << std::endl;
+  std::cout << "Shortest Job First (Non-preemptive algorithm)" << std::endl;
   std::cout << "Enter number of Processes: ";
   int n;
   while (!(std::cin >> n) || n <= 0) {
@@ -160,9 +161,105 @@ void ProcessScheduler::SJF::schedule() {
   std::cout << "Average Waiting Time : " << total_wt / processes.size() << std::endl;
 }
 
-void ProcessScheduler::SRTF::init() { std::cout << "SRTF not implemented yet.\n"; }
-void ProcessScheduler::SRTF::addProcess(int at, int bt, int pri, int pid) {}
-void ProcessScheduler::SRTF::schedule() {}
+void ProcessScheduler::SRTF::init() {
+  processes.clear();
+  std::cout << "Shortest Remaining Time First (Preemptive algorithm)" << std::endl;
+  std::cout << "Enter number of Processes: ";
+  int n;
+  while (!(std::cin >> n) || n <= 0) {
+    std::cout << "Invalid input. Enter a positive number: ";
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  }
+  std::cout << "Enter process details (Arrival_Time Burst_Time)" << std::endl;
+  for (int i = 0; i < n; i++) {
+    int at,bt;
+    std::cin >> at >> bt;
+    addProcess(at, bt, 0, i + 1);
+  }
+}
+void ProcessScheduler::SRTF::addProcess(int at, int bt, int pri, int pid) {
+  Process p(at, bt, pri, pid);
+  processes.emplace_back(p);
+}
+void ProcessScheduler::SRTF::schedule() {
+  std::vector<ProcessState> states;
+  for (auto const &p : processes) {
+    states.emplace_back(p.p_id, p.arrival_time, p.burst_time);
+  }
+  std::sort(states.begin(), states.end(), [&](const ProcessState& p1, const ProcessState& p2) {
+    return p1.arrival_time < p2.arrival_time;
+  });
+  int curr_time = 0;
+  double total_tat = 0.0, total_wt = 0.0;
+  int counter = 0;
+  ProcessState* curr = nullptr;
+  int process_idx = 0;
+  std::unordered_map<int, int> pid_idx;
+  for (int i = 0;i < states.size(); i++) pid_idx[states[i].p_id] = i;
+  std::cout << "Process Execution Order (SRTF)" << std::endl;
+  std::cout << "Time\tPID" << std::endl;
+
+  while (counter < processes.size()) {
+    while (process_idx < states.size() && states[process_idx].arrival_time <= curr_time) {
+      queue.push(states[process_idx]);
+      process_idx++;
+    }
+
+    if (queue.empty()) {
+      if (process_idx < states.size()) curr_time = states[process_idx].arrival_time;
+      else break;
+      continue;
+    }
+
+    if (!curr && !queue.empty()) {
+      curr = new ProcessState(queue.top());
+      queue.pop();
+      std::cout << curr_time << "\t" << curr->p_id << std::endl;
+    }
+
+    if (!queue.empty() && curr && queue.top().remaining_time < curr->remaining_time) {
+      states[pid_idx[curr->p_id]] = *curr;
+      delete curr;
+      curr = new ProcessState(queue.top());
+      queue.pop();
+      std::cout << curr_time << "\t" << curr->p_id << std::endl;
+    }
+
+    if (curr) {
+      curr->remaining_time--;
+      states[pid_idx[curr->p_id]] = *curr;
+      curr_time++;
+      if (curr->remaining_time == 0) {
+        int id = pid_idx[curr->p_id];
+        states[id].end_time = curr_time;
+        states[id].remaining_time = 0;;
+        int tat = curr_time - states[id].arrival_time;
+        int wt = tat - states[id].burst_time;
+        total_wt += wt;
+        total_tat += tat;
+        delete curr;
+        curr = nullptr;
+        counter++;
+      }
+      else {
+        queue.push(states[pid_idx[curr->p_id]]);
+        delete curr;
+        curr = nullptr;
+      }
+    }
+  }
+  if (curr) delete curr;
+  std::cout << "Process Details:" << std::endl;
+  std::cout << "PID\tStart\tEnd\tRT\tTAT\tWT" << std::endl;
+  for (auto const&p: states) {
+    int tat = p.end_time - p.arrival_time;
+    int wt = tat - p.burst_time;
+    std::cout << p.p_id << "\t" << p.arrival_time << "\t" << p.end_time << "\t" << p.remaining_time << "\t" << tat << "\t" << wt << std::endl;
+  }
+  std::cout << "Average Turn Around Time: " << total_tat / processes.size() << std::endl;
+  std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
+}
 
 void ProcessScheduler::HRRN::init() { std::cout << "HRRN not implemented yet.\n"; }
 void ProcessScheduler::HRRN::addProcess(int at, int bt, int pri, int pid) {}

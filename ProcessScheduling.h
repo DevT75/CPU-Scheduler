@@ -49,6 +49,17 @@ class ProcessScheduler {
       };
       class SRTF : public Scheduler {
           public:
+              std::vector<Process> processes;
+              struct ProcessState {
+                  int p_id, arrival_time, end_time, burst_time, remaining_time;
+                  double tat, wt;
+                  ProcessState(int p_id, int arrival_time, int burst_time) : p_id(p_id), arrival_time(arrival_time), burst_time(burst_time), remaining_time(burst_time), end_time(-1), tat(0), wt(0) {}
+                  bool operator<(const ProcessState& p) const {
+                      if (remaining_time == p.remaining_time) return p_id > p.p_id;
+                      return remaining_time > p.remaining_time;
+                  }
+              };
+              std::priority_queue<ProcessState> queue;
               void init() override;
               void addProcess(int at, int bt, int pri = 0, int pid = -1) override;
               void schedule() override;

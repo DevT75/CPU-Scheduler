@@ -77,7 +77,14 @@ class ProcessScheduler {
       };
       class RR : public Scheduler {
           public:
+              struct ProcessState {
+                  int p_id, arrival_time, end_time, burst_time, remaining_time;
+                  ProcessState(int p_id, int at, int bt): p_id(p_id), arrival_time(at), burst_time(bt), remaining_time(bt), end_time(-1) {}
+              };
               void init() override;
+              int time_quantum;
+              std::vector<Process> processes;
+              std::queue<ProcessState> queue;
               void addProcess(int at, int bt, int pri = 0, int pid = -1) override;
               void schedule() override;
       };

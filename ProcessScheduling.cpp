@@ -356,9 +356,98 @@ void ProcessScheduler::HRRN::schedule() {
   std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
 }
 
-void ProcessScheduler::RR::init() { std::cout << "RR not implemented yet.\n"; }
-void ProcessScheduler::RR::addProcess(int at, int bt, int pri, int pid) {}
-void ProcessScheduler::RR::schedule() {}
+void ProcessScheduler::RR::init() {
+  processes.clear();
+  std::cout << "Highest Response Ratio Next (Non-Preemptive)" << std::endl;
+  std::cout << "Enter number of Processes: ";
+  int n;
+  while (!(std::cin >> n) || n <= 0) {
+    std::cout << "Invalid input. Enter a positive number: ";
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  }
+  std::cout << "Enter Time Quantum: ";
+  std::cin >> time_quantum;
+  std::cout << "Enter process details (Arrival_Time Burst_Time)" << std::endl;
+  for (int i = 0; i < n; i++) {
+    int at,bt;
+    std::cin >> at >> bt;
+    addProcess(at, bt, 0, i + 1);
+  }
+}
+void ProcessScheduler::RR::addProcess(int at, int bt, int pri, int pid) {
+  Process p(at, bt, pri, pid);
+  processes.emplace_back(p);
+}
+void ProcessScheduler::RR::schedule() {
+  std::vector<ProcessState> states;
+  for (auto const &p : processes) {
+    states.emplace_back(p.p_id, p.arrival_time, p.burst_time);
+  }
+  std::sort(states.begin(), states.end(), [&](const ProcessState& p1, const ProcessState& p2) {
+    return p1.arrival_time < p2.arrival_time;
+  });
+
+  int curr_time = 0, process_idx = 0, counter = 0;
+  double total_tat = 0.0, total_wt = 0.0;
+
+  std::unordered_map<int, int> pid_idx;
+  for (int i = 0;i < states.size(); i++) pid_idx[states[i].p_id] = i;
+
+  std::cout << "Process Execution Order (Round Robin, Quantum = " << time_quantum << ")" << std::endl;
+  std::cout << "Time\tPID\tRT" << std::endl;
+  while (counter < processes.size()) {
+    while (process_idx < states.size() && states[process_idx].arrival_time <= curr_time) {
+      queue.push(states[process_idx]);
+      process_idx++;
+    }
+
+    if (queue.empty()) {
+      if (process_idx < states.size()) {
+        curr_time = states[process_idx].arrival_time;
+        continue;
+      }
+      break;
+    }
+
+    ProcessState curr = queue.front();
+    queue.pop();
+
+    std::cout << curr_time << "\t" << curr.p_id << "\t" << curr.remaining_time << std::endl;
+
+    int run_time = std::min(time_quantum, curr.remaining_time);
+    curr.remaining_time -= run_time;
+    curr_time += run_time;
+
+    if (curr.remaining_time == 0) {
+      curr.end_time = curr_time;
+      int tat = curr.end_time - curr.arrival_time;
+      int wt = tat - curr.burst_time;
+      total_tat += tat;
+      total_wt += wt;
+      states[pid_idx[curr.p_id]] = curr;
+      counter++;
+    }
+    else {
+      while (process_idx < states.size() && states[process_idx].arrival_time <= curr_time) {
+        queue.push(states[process_idx]);
+        process_idx++;
+      }
+      queue.push(curr);
+    }
+  }
+
+  std::cout << "Process Details:" << std::endl;
+  std::cout << "PID\tStart\tEnd\tTAT\tWT" << std::endl;
+  for (auto const &p: states) {
+    int tat = p.end_time - p.arrival_time;
+    int wt = tat - p.burst_time;
+    std::cout << p.p_id << "\t" << p.arrival_time << "\t" << p.end_time << "\t" << tat << "\t" << wt << std::endl;
+  }
+
+  std::cout << "Average Turn Around Time: " << total_tat / processes.size() << std::endl;
+  std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
+}
 
 void ProcessScheduler::RRP::init() { std::cout << "RRP not implemented yet.\n"; }
 void ProcessScheduler::RRP::addProcess(int at, int bt, int pri, int pid) {}

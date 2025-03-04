@@ -358,7 +358,7 @@ void ProcessScheduler::HRRN::schedule() {
 
 void ProcessScheduler::RR::init() {
   processes.clear();
-  std::cout << "Highest Response Ratio Next (Non-Preemptive)" << std::endl;
+  std::cout << "Round Robin Scheduling" << std::endl;
   std::cout << "Enter number of Processes: ";
   int n;
   while (!(std::cin >> n) || n <= 0) {
@@ -449,6 +449,171 @@ void ProcessScheduler::RR::schedule() {
   std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
 }
 
+void ProcessScheduler::PS::init() {
+  processes.clear();
+  std::cout << "Priority Scheduling (Non-Preemptive)" << std::endl;
+  std::cout << "Enter number of Processes: ";
+  int n;
+  while (!(std::cin >> n) || n <= 0) {
+    std::cout << "Invalid input. Enter a positive number: ";
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  }
+  std::cout << "Enter process details (Arrival_Time Burst_Time Priority(Lower is better)" << std::endl;
+  for (int i = 0; i < n; i++) {
+    int at,bt,pri;
+    std::cin >> at >> bt >> pri;
+    addProcess(at, bt, pri, i + 1);
+  }
+}
+void ProcessScheduler::PS::addProcess(int at, int bt, int pri, int pid) {
+  Process p(at, bt, pri, pid);
+  processes.emplace_back(p);
+}
+void ProcessScheduler::PS::schedule() {
+  std::vector<ProcessState> states;
+  for (auto const &p : processes) {
+    states.emplace_back(p.p_id, p.arrival_time, p.burst_time, p.priority);
+  }
+  std::sort(states.begin(), states.end(),[&](const ProcessState &a, const ProcessState &b) {
+    if (a.arrival_time == b.arrival_time) return a.priority < b.priority;
+    return a.arrival_time < b.arrival_time;
+  });
+
+  int counter = 0, process_idx = 0, curr_time = 0;
+  double total_tat = 0.0, total_wt = 0.0;
+
+  auto cmp = [&](const ProcessState &a, const ProcessState &b) {
+    if (a.priority == b.priority) return a.arrival_time < b.arrival_time;
+    return a.priority < b.priority;
+  };
+  std::set<ProcessState, decltype(cmp)> queue(cmp);
+
+  std::unordered_map<int, int> pid_idx;
+  for (int i = 0;i < states.size(); i++) pid_idx[states[i].p_id] = i;
+
+  while (counter < processes.size()) {
+    while (process_idx < states.size() && states.at(process_idx).arrival_time <= curr_time) {
+      queue.insert(states[process_idx]);
+      process_idx++;
+    }
+
+    if (queue.size() == 0) {
+      if (process_idx < processes.size()){ curr_time = states[process_idx].arrival_time; continue; }
+      break;
+    }
+
+    ProcessState curr = *queue.begin();
+    queue.erase(queue.begin());
+
+    curr_time += curr.burst_time;
+    curr.end_time = curr_time;
+    int tat = curr.end_time - curr.arrival_time;
+    int wt = tat - curr.burst_time;
+    total_tat += tat;
+    total_wt += wt;
+
+    states[pid_idx[curr.p_id]] = curr;
+    counter++;
+  }
+
+  std::cout << "Process Details (Non-preemptive Priority Scheduling) :" << std::endl;
+  std::cout << "PID\tStart\tEnd\tTAT\tWT" << std::endl;
+  for (auto const &p: states) {
+    int tat = p.end_time - p.arrival_time;
+    int wt = tat - p.burst_time;
+    std::cout << p.p_id << "\t" << p.arrival_time << "\t" << p.end_time << "\t" << tat << "\t" << wt << std::endl;
+  }
+
+  std::cout << "Average Turn Around Time: " << total_tat / processes.size() << std::endl;
+  std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
+
+  std::cout << std::endl << std::endl;
+
+  states.clear();
+  for (auto const &p : processes) {
+    states.emplace_back(p.p_id, p.arrival_time, p.burst_time, p.priority);
+  }
+  std::sort(states.begin(), states.end(),[&](const ProcessState &a, const ProcessState &b) {
+    if (a.arrival_time == b.arrival_time) return a.priority < b.priority;
+    return a.arrival_time < b.arrival_time;
+  });
+
+  curr_time = process_idx = counter =0;
+  total_tat = 0.0, total_wt = 0.0;
+  queue.clear();
+  ProcessState* curr = nullptr;
+
+  std::cout << "Process Execution Order (Preemptive Priority Scheduling)" << std::endl;
+  std::cout << "Time\tPID\tRT\tPriority" << std::endl;
+
+  while (counter < processes.size()) {
+    while (process_idx < processes.size() && states[process_idx].arrival_time <= curr_time) {
+      queue.insert(states[process_idx]);
+      process_idx++;
+    }
+
+    if (queue.size() == 0) {
+      if (process_idx < processes.size()) { curr_time= states[process_idx].arrival_time; continue; }
+      break;
+    }
+
+    if (!curr && !queue.empty()) {
+      curr = new ProcessState(*queue.begin());
+      queue.erase(queue.begin());
+      std::cout << curr_time << "\t" << curr->p_id << "\t" << curr->remaining_time << "\t" << curr->priority << std::endl;
+    }
+
+    if (!queue.empty() && curr && curr->priority > queue.begin()->priority) {
+      states[pid_idx[curr->p_id]] = *curr;
+      delete curr;
+      curr = new ProcessState(*queue.begin());
+      queue.erase(queue.begin());
+      std::cout << curr_time << "\t" << curr->p_id << "\t" << curr->remaining_time << "\t" << curr->priority << std::endl;
+    }
+
+    if (curr) {
+      curr_time++;
+      curr->remaining_time--;
+      int id = pid_idx[curr->p_id];
+      states[id] = *curr;
+      if (curr->remaining_time == 0) {
+        counter++;
+        states[id].end_time = curr_time;
+        states[id].remaining_time = 0;;
+        int tat = curr_time - states[id].arrival_time;
+        int wt = tat - states[id].burst_time;
+        total_wt += wt;
+        total_tat += tat;
+        delete curr;
+        curr = nullptr;
+      }
+      else {
+        queue.insert(states[id]);
+        delete curr;
+        curr = nullptr;
+      }
+    }
+  }
+
+  if (curr) delete curr;
+
+  std::cout << "Process Details (Preemptive Priority Scheduling):" << std::endl;
+  std::cout << "PID\tStart\tEnd\tTAT\tWT" << std::endl;
+  for (auto const &p: states) {
+    int tat = p.end_time - p.arrival_time;
+    int wt = tat - p.burst_time;
+    std::cout << p.p_id << "\t" << p.arrival_time << "\t" << p.end_time << "\t" << tat << "\t" << wt << std::endl;
+  }
+
+  std::cout << "Average Turn Around Time: " << total_tat / processes.size() << std::endl;
+  std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
+}
+
+void ProcessScheduler::LS::init() { std::cout << "LS not implemented yet.\n"; }
+void ProcessScheduler::LS::addProcess(int at, int bt, int pri, int pid) {}
+void ProcessScheduler::LS::schedule() {}
+
 void ProcessScheduler::RRP::init() { std::cout << "RRP not implemented yet.\n"; }
 void ProcessScheduler::RRP::addProcess(int at, int bt, int pri, int pid) {}
 void ProcessScheduler::RRP::schedule() {}
@@ -465,13 +630,7 @@ void ProcessScheduler::MQS::init() { std::cout << "MQS not implemented yet.\n"; 
 void ProcessScheduler::MQS::addProcess(int at, int bt, int pri, int pid) {}
 void ProcessScheduler::MQS::schedule() {}
 
-void ProcessScheduler::LS::init() { std::cout << "LS not implemented yet.\n"; }
-void ProcessScheduler::LS::addProcess(int at, int bt, int pri, int pid) {}
-void ProcessScheduler::LS::schedule() {}
 
-void ProcessScheduler::PS::init() { std::cout << "PS not implemented yet.\n"; }
-void ProcessScheduler::PS::addProcess(int at, int bt, int pri, int pid) {}
-void ProcessScheduler::PS::schedule() {}
 
 ProcessScheduler::Process::Process(int at, int bt, int priority, int p_id) : arrival_time(at), burst_time(bt), priority(priority), p_id(p_id) {
  if (at < 0 || bt <= 0)

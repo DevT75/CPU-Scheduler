@@ -14,10 +14,10 @@ void ProcessScheduler::run(){
       std::cout << "1.) First Come First Serve (FCFS)" << std::endl;
       std::cout << "2.) Shortest Job First (SJF)" << std::endl;
       std::cout << "3.) Shortest Remaining Time First (SRTF)" << std::endl;
-      std::cout << "4.) Round Robin Scheduling (RR)" << std::endl;
-      std::cout << "5.) Priority Scheduling" << std::endl;
-      std::cout << "6.) Lottery Scheduling" << std::endl;
-      std::cout << "7.) Highest Response Ratio Next (HRRN)" << std::endl;
+      std::cout << "4.) Highest Response Ratio Next (HRRN)" << std::endl;
+      std::cout << "5.) Round Robin Scheduling (RR)" << std::endl;
+      std::cout << "6.) Priority Scheduling" << std::endl;
+      std::cout << "7.) Lottery Scheduling" << std::endl;
       std::cout << "8.) Multiple Queue Scheduling" << std::endl;
       std::cout << "9.) Multilevel Feedback Queue Scheduling" << std::endl;
       std::cout << "10.) Round Robin with Aging" << std::endl;
@@ -29,10 +29,10 @@ void ProcessScheduler::run(){
           case 1: scheduler = &fcfs_; break;
           case 2: scheduler = &sjf_; break;
           case 3: scheduler = &srtf_; break;
-          case 4: scheduler = &rr_; break;
-          case 5: scheduler = &ps_; break;
-          case 6: scheduler = &ls_; break;
-          case 7: scheduler = &hrrn_; break;
+          case 4: scheduler = &hrrn_; break;
+          case 5: scheduler = &rr_; break;
+          case 6: scheduler = &ps_; break;
+          case 7: scheduler = &ls_; break;
           case 8: scheduler = &mqs_; break;
           case 9: scheduler = &mfqs_; break;
           case 10: scheduler = &rra_; break;
@@ -261,9 +261,100 @@ void ProcessScheduler::SRTF::schedule() {
   std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
 }
 
-void ProcessScheduler::HRRN::init() { std::cout << "HRRN not implemented yet.\n"; }
-void ProcessScheduler::HRRN::addProcess(int at, int bt, int pri, int pid) {}
-void ProcessScheduler::HRRN::schedule() {}
+void ProcessScheduler::HRRN::init() {
+  processes.clear();
+  std::cout << "Highest Response Ratio Next (Non-Preemptive)" << std::endl;
+  std::cout << "Enter number of Processes: ";
+  int n;
+  while (!(std::cin >> n) || n <= 0) {
+    std::cout << "Invalid input. Enter a positive number: ";
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  }
+  std::cout << "Enter process details (Arrival_Time Burst_Time)" << std::endl;
+  for (int i = 0; i < n; i++) {
+    int at,bt;
+    std::cin >> at >> bt;
+    addProcess(at, bt, 0, i + 1);
+  }
+}
+void ProcessScheduler::HRRN::addProcess(int at, int bt, int pri, int pid) {
+  Process p(at, bt, pri, pid);
+  processes.emplace_back(p);
+}
+void ProcessScheduler::HRRN::schedule() {
+  std::vector<ProcessState> states;
+  for (auto const &p : processes) {
+    states.emplace_back(p.p_id, p.arrival_time, p.burst_time);
+  }
+  std::sort(states.begin(), states.end(), [&](const ProcessState& p1, const ProcessState& p2) {
+    return p1.arrival_time < p2.arrival_time;
+  });
+
+  int counter = 0, curr_time = 0, process_idx = 0;
+  double total_tat = 0.0, total_wt = 0.0;
+  std::unordered_map<int, int> pid_idx;
+  for (int i = 0;i < states.size();i++) pid_idx[states[i].p_id] = i;
+
+  auto cmp = [&](const ProcessState& p1, const ProcessState& p2) {
+    double rr1 = (curr_time - p1.arrival_time + p1.burst_time) / static_cast<double> (p1.burst_time);
+    double rr2 = (curr_time - p2.arrival_time + p2.burst_time) / static_cast<double> (p2.burst_time);
+    if (rr1 == rr2) return p1.p_id < p2.p_id;
+    return rr1 > rr2;
+  };
+  std::set<ProcessState, decltype(cmp)> queue(cmp);
+
+
+  std::cout << "Process Execution Order:" << std::endl;
+  std::cout << "Time\tPID" << std::endl;
+  while (counter < processes.size()) {
+    while (process_idx < states.size() && states[process_idx].arrival_time <= curr_time) {
+      queue.insert(states[process_idx]);
+      process_idx++;
+    }
+
+    if (queue.empty()) {
+      if (process_idx < states.size()) {curr_time = states[process_idx].arrival_time; continue;}
+      break;
+    }
+
+    ProcessState curr = *queue.begin();
+    queue.erase(queue.begin());
+    std::cout << curr_time << "\t" << curr.p_id << std::endl;
+
+    curr_time += curr.burst_time;
+    curr.end_time = curr_time;
+
+    int tat = curr.end_time - curr.arrival_time;
+    int wt = tat - curr.burst_time;
+
+    total_tat += tat;
+    total_wt += wt;
+
+    states[pid_idx[curr.p_id]] = curr;
+    counter++;
+
+    std::vector<ProcessState> temp;
+    while (!queue.empty()) {
+      temp.push_back(*queue.begin());
+      queue.erase(queue.begin());
+    }
+    for (auto &p : temp) {
+      queue.insert(p);
+    }
+  }
+
+  std::cout << "Process Details:" << std::endl;
+  std::cout << "PID\tStart\tEnd\tTAT\tWT" << std::endl;
+  for (auto const&p: states) {
+    int tat = p.end_time - p.arrival_time;
+    int wt = tat - p.burst_time;
+    std::cout << p.p_id << "\t" << p.arrival_time << "\t" << p.end_time << "\t" << tat << "\t" << wt << std::endl;
+  }
+
+  std::cout << "Average Turn Around Time: " << total_tat / processes.size() << std::endl;
+  std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
+}
 
 void ProcessScheduler::RR::init() { std::cout << "RR not implemented yet.\n"; }
 void ProcessScheduler::RR::addProcess(int at, int bt, int pri, int pid) {}

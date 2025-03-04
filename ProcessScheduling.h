@@ -66,6 +66,11 @@ class ProcessScheduler {
       };
       class HRRN : public Scheduler {
           public:
+              struct ProcessState {
+                  int p_id, arrival_time, end_time, burst_time;
+                  ProcessState(int p_id, int at, int bt): p_id(p_id), arrival_time(at), burst_time(bt), end_time(-1) {}
+              };
+              std::vector<Process> processes;
               void init() override;
               void addProcess(int at, int bt, int pri = 0, int pid = -1) override;
               void schedule() override;

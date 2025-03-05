@@ -622,9 +622,169 @@ void ProcessScheduler::RRA::init() { std::cout << "RRA not implemented yet.\n"; 
 void ProcessScheduler::RRA::addProcess(int at, int bt, int pri, int pid) {}
 void ProcessScheduler::RRA::schedule() {}
 
-void ProcessScheduler::MFQS::init() { std::cout << "MFQS not implemented yet.\n"; }
-void ProcessScheduler::MFQS::addProcess(int at, int bt, int pri, int pid) {}
-void ProcessScheduler::MFQS::schedule() {}
+void ProcessScheduler::MFQS::init() {
+  processes.clear();
+  std::cout << "Multilevel Feedback Queue Scheduling" << std::endl;
+  std::cout << "Enter number of Processes: ";
+  int n;
+  while (!(std::cin >> n) || n <= 0) {
+    std::cout << "Invalid input. Enter a positive number: ";
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  }
+  std::cout << "Enter process details (Arrival_Time Burst_Time)" << std::endl;
+  for (int i = 0; i < n; i++) {
+    int at,bt;
+    std::cin >> at >> bt;
+    addProcess(at, bt, 0, i + 1);
+  }
+}
+void ProcessScheduler::MFQS::addProcess(int at, int bt, int pri, int pid) {
+  Process p(at, bt, pri, pid);
+  processes.emplace_back(p);
+}
+void ProcessScheduler::MFQS::schedule() {
+  std::vector<ProcessState> states;
+  for (auto const &p : processes) {
+    states.emplace_back(p.p_id, p.arrival_time, p.burst_time, p.priority);
+  }
+  std::sort(states.begin(), states.end(), [&](const ProcessState& p1, const ProcessState& p2) {
+    return p1.arrival_time < p2.arrival_time;
+  });
+
+  int curr_time = 0, process_idx = 0, counter = 0;
+  double total_tat = 0.0, total_wt = 0.0;
+
+  std::unordered_map<int, int> pid_idx;
+  for (int i = 0;i < states.size(); i++) pid_idx[states[i].p_id] = i;
+
+  std::vector<std::queue<ProcessState*>> queues(time_quantum.size());
+  ProcessState* curr = nullptr;
+
+  std::cout << "Process Execution Order (Multilevel Feedback Queue Scheduling): " << std::endl;
+  std::cout << "Time\tPID\tQ" << std::endl;
+  int last_process = -1;
+
+  while (counter < processes.size()) {
+    // add processes to high priority queue when they arrive
+    while (process_idx < states.size() && states[process_idx].arrival_time <= curr_time) {
+      states[process_idx].in_Q = true;
+      queues[0].push(&states[process_idx]);
+      process_idx++;
+    }
+
+    // check if any process can be promoted to higher queues
+    for (ProcessState& p: states) {
+      if (p.end_time == -1 && p.arrival_time <= curr_time && (!curr || curr->p_id != p.p_id)) {
+        p.wait_time = curr_time - p.arrival_time;
+        int promotion_level = p.wait_time / max_wait_time;
+        int final_level = std::max(0, p.curr_q_level - promotion_level);
+        if (final_level < p.curr_q_level && !p.in_Q) {
+          p.curr_q_level = final_level;
+          queues[final_level].push(&p);
+          p.in_Q = true;
+        }
+      }
+    }
+
+    // check if higher level queues has any process for preemption
+    if (curr) {
+      for (int i = 0;i < curr->curr_q_level; i++) {
+        if (!queues[i].empty()) {
+          states[pid_idx[curr->p_id]] = * curr;
+          curr->in_Q = true;
+          queues[curr->curr_q_level].push(curr);
+          delete curr;
+          curr = nullptr;
+          break;
+        }
+      }
+    }
+
+    // chooose the process for execution from the highest priority queue
+    if (!curr) {
+      bool found = false;
+      for (int i = 0;i < time_quantum.size();i++) {
+        if (!queues[i].empty()) {
+          curr = queues[i].front();
+          curr->in_Q = false;
+          queues[i].pop();
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        if (process_idx < states.size()){ curr_time = states[process_idx].arrival_time; continue;}
+        break;
+      }
+      if (last_process != curr->p_id) {
+        last_process = curr->p_id;
+        std::cout << curr_time << "\t" << curr->p_id << "\t" << curr->curr_q_level + 1 << std::endl;
+      };
+    }
+
+    // we can try to simulate i/o operation, lets say a process has 50% chance to go for I/O
+    // curr->io_ops = (rand() % 2 == 0);
+
+    // this will affect the run time of the process, 1 unit of time is chosen a minimum time before the process relinquish cpu
+    int run_time = curr->io_ops ? 1 : std::min(curr->remaining_time, time_quantum[curr->curr_q_level]);
+    curr->remaining_time -= run_time;
+    curr_time += run_time;
+
+    // check for arrival of process during execution
+    while (process_idx < states.size() && states[process_idx].arrival_time <= curr_time) {
+      states[process_idx].in_Q = true;
+      queues[0].push(&states[process_idx]);
+      process_idx++;
+      if (!queues[0].empty() && curr->curr_q_level > 0) {
+        curr->in_Q = true;
+        queues[curr->curr_q_level].push(curr);
+        curr = nullptr;
+        break;
+      }
+    }
+
+    // update current process state
+    if (curr) {
+      if (curr->remaining_time <= 0) {
+        // completion
+        curr->end_time = curr_time;
+        int tat = curr->end_time - curr->arrival_time;
+        int wt = tat - curr->burst_time;
+        total_tat += tat;
+        total_wt += wt;
+        curr = nullptr;
+        counter++;
+      }
+      else if (curr->io_ops && curr->curr_q_level > 0) {
+        // promotion
+        curr->curr_q_level--;
+        queues[curr->curr_q_level].push(curr);
+        curr = nullptr;
+      }
+      else if (run_time == time_quantum[curr->curr_q_level] && curr->curr_q_level < 2) {
+        // demotion
+        curr->curr_q_level++;
+        curr->in_Q = true;
+        queues[curr->curr_q_level].push(curr);
+        curr = nullptr;
+      }
+    }
+  }
+
+  if (curr) delete curr;
+
+  std::cout << "Process Details:" << std::endl;
+  std::cout << "PID\tStart\tEnd\tTAT\tWT" << std::endl;
+  for (auto const &p: states) {
+    int tat = p.end_time - p.arrival_time;
+    int wt = tat - p.burst_time;
+    std::cout << p.p_id << "\t" << p.arrival_time << "\t" << p.end_time << "\t" << tat << "\t" << wt << std::endl;
+  }
+
+  std::cout << "Average Turn Around Time: " << total_tat / processes.size() << std::endl;
+  std::cout << "Average Waiting Time: " << total_wt / processes.size() << std::endl;
+}
 
 void ProcessScheduler::MLQS::init() {
   processes.clear();
@@ -658,7 +818,7 @@ void ProcessScheduler::MLQS::schedule() {
     return p1.arrival_time < p2.arrival_time;
   });
 
-  int curr_time = 0, process_idx = 0, counter = 0, high_idx = 0, low_idx = 0;
+  int curr_time = 0, process_idx = 0, counter = 0;
   double total_tat = 0.0, total_wt = 0.0;
 
   std::unordered_map<int, int> pid_idx;

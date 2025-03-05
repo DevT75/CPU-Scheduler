@@ -102,9 +102,18 @@ class ProcessScheduler {
       };
       class MFQS : public Scheduler {
           public:
+              struct ProcessState {
+                  int p_id, priority, arrival_time, end_time, burst_time, remaining_time, wait_time, curr_q_level;
+                  bool io_ops, in_Q;
+                  ProcessState(int p_id, int at, int bt, int p): p_id(p_id), arrival_time(at), burst_time(bt), remaining_time(bt), end_time(-1), priority(p), wait_time(0), curr_q_level(0), io_ops(false), in_Q(false) {}
+              };
+              std::vector<Process> processes;
               void init() override;
               void addProcess(int at, int bt, int pri = 0, int pid = -1) override;
               void schedule() override;
+          private:
+              std::vector<int> time_quantum = { 2, 4 ,8 };
+              int max_wait_time = 10;
       };
       class MLQS : public Scheduler {
           public:

@@ -106,8 +106,14 @@ class ProcessScheduler {
               void addProcess(int at, int bt, int pri = 0, int pid = -1) override;
               void schedule() override;
       };
-      class MQS : public Scheduler {
+      class MLQS : public Scheduler {
           public:
+              struct ProcessState {
+                  int p_id, priority, arrival_time, end_time, burst_time, remaining_time;
+                  ProcessState(int p_id, int at, int bt, int p): p_id(p_id), arrival_time(at), burst_time(bt), remaining_time(bt), end_time(-1), priority(p) {}
+              };
+              std::vector<Process> processes;
+              int time_quantum;
               void init() override;
               void addProcess(int at, int bt, int pri = 0, int pid = -1) override;
               void schedule() override;
@@ -138,7 +144,7 @@ class ProcessScheduler {
       RRP rrp_;
       RRA rra_;
       MFQS mfqs_;
-      MQS mqs_;
+      MLQS mlqs_;
       LS ls_;
       PS ps_;
 };
